@@ -1,6 +1,8 @@
 import { EC2ExampleProps } from './ec2-instance';
 
 export enum InstanceSize {
+  'MICRO' = 'micro',
+  'SMALL' = 'small',
   'LARGE' = 'large',
   'XLARGE' = 'xlarge',
   'XLARGE2' = 'xlarge2',

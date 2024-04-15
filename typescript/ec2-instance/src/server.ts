@@ -110,14 +110,20 @@ export class ServerResources extends Construct {
     // Determine the correct CPUType and Instance Class based on the props passed in
     if (props.cpuType == 'ARM64') {
       cpuType = AmazonLinuxCpuType.ARM_64;
-      instanceClass = InstanceClass.M7G;
+      instanceClass = InstanceClass.T4G;
     } else {
       cpuType = AmazonLinuxCpuType.X86_64;
-      instanceClass = InstanceClass.M5;
+      instanceClass = InstanceClass.T2;
     }
 
     // Determine the correct InstanceSize based on the props passed in
     switch (props.instanceSize) {
+      case 'micro':
+        instanceSize = InstanceSize.MICRO;
+        break;           
+      case 'small':
+        instanceSize = InstanceSize.SMALL;
+        break;      
       case 'large':
         instanceSize = InstanceSize.LARGE;
         break;

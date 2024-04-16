@@ -6,13 +6,14 @@ using Constructs;
 
 namespace Ec2Instance
 {
-    public class Ec2InstanceStack : Stack
-    {
-        internal Ec2InstanceStack(Construct scope, string id, IStackProps props = null) : base(scope, id, props)
+  public class Ec2InstanceStack : Stack
+  {
+    internal Ec2InstanceStack(Construct scope, string id, IStackProps props = null) : base(scope, id, props)
     {
 
       //ToDO: Create KeyPair
-
+      // Create EC2 Key Pair
+      KeyPair keyPair = CreateKeyPair();
 
       //Subnet config for VPC      
       SubnetConfiguration[] subnetConfigurations = GetSubnetConfigurations();
@@ -37,7 +38,7 @@ namespace Ec2Instance
       AmazonLinuxImage ami = GetLinuxImageConfig();
 
       // Create Ec2 Instance
-      var ec2Instance = CreateEC2Instance(vpc, securityGroup, role, ami);
+      var ec2Instance = CreateEC2Instance(vpc, securityGroup, role, keyPair, ami);
 
 
       // Create Asset that will be used as a part of User Data to run on First Load
@@ -45,55 +46,50 @@ namespace Ec2Instance
 
       // Create outputs for connecting
 
-      new CfnOutput(this,"IP Address",new CfnOutputProps{Value = ec2Instance.InstancePublicIp});
+      _ = new CfnOutput(this, "IP Address", new CfnOutputProps { Value = ec2Instance.InstancePublicIp });
 
       // new CfnOutput(this, "Download Key Command",
       //       new CfnOutputProps { Value ="aws secretsmanager get-secret-value --secret-id ec2-ssh-key/cdk-keypair/private --query SecretString --output text > cdk-key.pem && chmod 400 cdk-key.pem" });
 
-      new CfnOutput(this, "ssh Command",
-            new CfnOutputProps { Value = "ssh -i cdk-key.pem -o IdentitiesOnly=yes ec2-user@" + ec2Instance.InstancePublicIp});
+      _ = new CfnOutput(this, "ssh Command",
+            new CfnOutputProps { Value = "ssh -i cdk-key.pem -o IdentitiesOnly=yes ec2-user@" + ec2Instance.InstancePublicIp });
 
 
     }
-    private  SubnetConfiguration[] GetSubnetConfigurations()
+    private static SubnetConfiguration[] GetSubnetConfigurations()
     {
-      return new[]
-            {
-                   new SubnetConfiguration
-                   {
-                       CidrMask = 24,
-                       Name = "asterisk",
-                       SubnetType = SubnetType.PUBLIC
-               }
-    };
-
-
+      return new[] 
+      {
+        new SubnetConfiguration
+        {
+          CidrMask = 24,
+          Name = "asterisk",
+          SubnetType = SubnetType.PUBLIC
+        }
+      };
     }
     private Vpc GetVpc(SubnetConfiguration[] subnetConfigurations)
     {
       return new Vpc(this, "MyVPC", new VpcProps
-      {
-        NatGateways = 0,
-        SubnetConfiguration = subnetConfigurations
-
-      }
-
-    );
-
+        {
+          NatGateways = 0,
+          SubnetConfiguration = subnetConfigurations
+        }
+      );
     }
-   private SecurityGroup CreateSecurityGroup(Vpc vpc)
+    private SecurityGroup CreateSecurityGroup(Vpc vpc)
     {
 
       // Allow SSH access (TCP port 22)
 
       return new SecurityGroup(this, "SecurityGroup",
-          new SecurityGroupProps
-          {
-            Vpc = vpc,
-            Description = "Allow SSH access on TCP Port 22 ",
-            AllowAllOutbound = true
+        new SecurityGroupProps
+        {
+          Vpc = vpc,
+          Description = "Allow SSH access on TCP Port 22 ",
+          AllowAllOutbound = true
 
-          });
+        });
     }
 
     private Role CreateIamRole()
@@ -104,31 +100,42 @@ namespace Ec2Instance
       });
     }
 
-    private  AmazonLinuxImage GetLinuxImageConfig()
+    private KeyPair CreateKeyPair()
+    {
+      return new KeyPair(this, "ec2KeyPair", new KeyPairProps
+      {
+        KeyPairName = "ec2-key-pair-us-east-1"
+      });
+    }
+
+    private static AmazonLinuxImage GetLinuxImageConfig()
     {
       return new AmazonLinuxImage(new AmazonLinuxImageProps
       {
-        Generation = AmazonLinuxGeneration.AMAZON_LINUX_2,
-        CpuType = AmazonLinuxCpuType.ARM_64
+        Generation = AmazonLinuxGeneration.AMAZON_LINUX_2023,
+        CpuType = AmazonLinuxCpuType.X86_64
 
       });
     }
-  private Instance_  CreateEC2Instance(Vpc vpc, SecurityGroup securityGroup, Role role, AmazonLinuxImage ami)
+    private Instance_ CreateEC2Instance(Vpc vpc, SecurityGroup securityGroup,
+      Role role, KeyPair keyPair, AmazonLinuxImage ami)
     {
       var ec2Instance = new Instance_(this, "Instance", new InstanceProps
       {
         Vpc = vpc,
-        InstanceType = InstanceType.Of(InstanceClass.BURSTABLE4_GRAVITON, InstanceSize.MICRO),
+        InstanceType = InstanceType.Of(InstanceClass.T2, InstanceSize.MICRO),
         MachineImage = ami,
         SecurityGroup = securityGroup,
-        Role = role
-
+        Role = role,
+        KeyPair = keyPair
       });
       return ec2Instance;
     }
 
-    private Asset CreateAsset(){
-      return new Asset(this,"Asset", new AssetProps{
+    private Asset CreateAsset()
+    {
+      return new Asset(this, "Asset", new AssetProps
+      {
         Path = "./src/configure.sh"
       });
 
@@ -137,13 +144,11 @@ namespace Ec2Instance
     private void CreateAssetAndRunCommand(Instance_ ec2Instance)
     {
       var asset = CreateAsset();
-
       var localPath = ec2Instance.UserData.AddS3DownloadCommand(
         new S3DownloadOptions
         {
           Bucket = asset.Bucket,
           BucketKey = asset.S3ObjectKey
-
         });
 
       ec2Instance.UserData.AddExecuteFileCommand(
@@ -155,16 +160,5 @@ namespace Ec2Instance
         });
       asset.GrantRead(ec2Instance.Role);
     }
-
-    
-
- 
-
-   
-
-  
-
-  
-
   }
 }
